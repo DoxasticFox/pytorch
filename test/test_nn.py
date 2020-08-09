@@ -4653,6 +4653,59 @@ class TestNN(NNTestCase):
         with self.assertRaisesRegex(RuntimeError, 'empty tensor'):
             packed = rnn_utils.pack_padded_sequence(torch.randn(0, 0), [])
 
+    def test_reverse_padded_sequence(self):
+        input_batch_last = torch.tensor([[1., 2.], [3., 4.], [5., 6.], [7., 8.]])
+        lengths_batch_last = torch.tensor([3, 2])
+        expected_batch_last = tensor([[5., 4.],
+                                      [3., 2.],
+                                      [1., 0.],
+                                      [0., 0.]])
+
+        input_batch_first = torch.tensor([[1., 2., 3., 4.], [5., 6., 7., 8.]])
+        lengths_batch_first = torch.tensor([3, 2])
+        expected_batch_first = tensor([[3., 2., 1., 0.],
+                                       [6., 5., 0., 0.]])
+
+        input_many_dims = torch.tensor([[[3., 4.],
+                                         [9., 2.],
+                                         [1., 7.],
+                                         [5., 5.]],
+
+                                        [[3., 8.],
+                                         [7., 3.],
+                                         [4., 5.],
+                                         [1., 8.]],
+
+                                        [[2., 6.],
+                                         [7., 6.],
+                                         [3., 3.],
+                                         [8., 3.]]])
+        lengths_many_dims = torch.tensor([2, 3, 2, 1])
+        expected_many_dims = tensor([[[3., 8.],
+                                      [7., 6.],
+                                      [4., 5.],
+                                      [5., 5.]],
+
+                                     [[3., 4.],
+                                      [7., 3.],
+                                      [1., 7.],
+                                      [0., 0.]],
+
+                                     [[0., 0.],
+                                      [9., 2.],
+                                      [0., 0.],
+                                      [0., 0.]]])
+
+        self.assertEqual(
+            reverse_padded_sequence(input_batch_last, lengths_batch_last),
+            expected_batch_last)
+        self.assertEqual(
+            reverse_padded_sequence(input_batch_first, lengths_batch_first),
+            expected_batch_first)
+        self.assertEqual(
+            reverse_padded_sequence(input_many_dims, lengths_many_dims),
+            expected_many_dims)
+
     def test_LSTM_cell(self):
         # this is just a smoke test; these modules are implemented through
         # autograd so no Jacobian test is needed

@@ -408,3 +408,72 @@ def pack_sequence(sequences, enforce_sorted=True):
     """
     lengths = torch.as_tensor([v.size(0) for v in sequences])
     return pack_padded_sequence(pad_sequence(sequences), lengths, enforce_sorted=enforce_sorted)
+
+
+def reverse_padded_sequence(input, lengths, batch_first=False):
+    # type: (Tensor, Tensor, bool) -> Tensor
+    r"""Reverses sequences according to their lengths.
+
+    ``input`` should have size ``T x B x *`` if ``batch_first`` is False, or
+    ``B x T x *`` if True. ``T`` is the length of the longest sequence (or
+    larger), ``B`` is the batch size, and ``*`` is any number of dimensions
+    (including 0). ``lengths`` must have size ``B`` and contain values between
+    ``0`` and ``T``, inclusive.
+
+    Example:
+        >>> input = torch.tensor([[1., 2.], [3., 4.], [5., 6.], [7., 8.]])
+        >>> lengths = torch.tensor([3, 2])
+        >>> reverse_padded_sequence(input, lengths)
+        tensor([[5., 4.],
+                [3., 2.],
+                [1., 0.],
+                [0., 0.]])
+        >>> input = torch.tensor([[1., 2., 3., 4.], [5., 6., 7., 8.]])
+        >>> lengths = torch.tensor([3, 2])
+        >>> reverse_padded_sequence(input, lengths, batch_first=True)
+        tensor([[3., 2., 1., 0.],
+                [6., 5., 0., 0.]])
+
+    Arguments:
+        input (Tensor): padded batch of variable length sequences.
+        lengths (Tensor): list of sequence lengths.
+        batch_first (bool, optional): if ``True``, input should be in
+            ``B x T x *`` format.
+
+    Returns:
+        Tensor of size ``T x B x *`` if :attr:`batch_first` is ``False``.
+        Tensor of size ``B x T x *`` otherwise
+    """
+    if batch_first:
+        input = input.transpose(0, 1)
+
+    max_length, batch_size, *trailing_dims = input.shape
+
+    if len(lengths) != batch_size:
+        raise ValueError('lengths has batch size {} while input has batch '
+                         'size {}'.format(len(lengths), batch_size))
+
+    # Compute the new (i.e. reversed) indices
+    tiled_indices = torch.arange(max_length, device=lengths.device)
+    tiled_indices = tiled_indices.view(
+            (max_length, 1) + (1,) * len(trailing_dims))
+    tiled_indices = tiled_indices.expand_as(input)
+
+    tiled_lengths = lengths.view(
+            (1, batch_size) + (1,) * len(trailing_dims))
+    tiled_lengths = tiled_lengths.expand_as(input)
+
+    new_tiled_indices = (tiled_lengths - tiled_indices - 1).clamp(min=0)
+
+    # Reverse the sequences
+    reversed_unmasked = input.gather(0, new_tiled_indices)
+
+    # Any sequence whose length is less than `max_length` will have its last
+    # element (which was previously the first) repeated in reversed_unmasked.
+    # We set those to zero here.
+    reversed_masked = reversed_unmasked * (tiled_indices < tiled_lengths)
+
+    if batch_first:
+        reversed_masked = reversed_masked.transpose(0, 1)
+
+    return reversed_masked
